@@ -26,6 +26,12 @@ type Endereco struct {
 	UF 			string 	`json:"uf,omitempty"`
 }
 
+type Cidade struct {
+	Cidade 		string 	`json:"cidade,omitempty"`
+	UF 			string 	`json:"uf,omitempty"`
+	Pessoas		[]Pessoa `json:"pessoas,omitempty"`
+}
+
 const (
 	user = "postgres"
 	password ="postgres"
@@ -167,11 +173,37 @@ func DeletarPessoa(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 }
 
+func BuscarPessoasPorCidade(w http.ResponseWriter, r *http.Request){
+	cidadeURL := r.URL.Query().Get("cidade")
+	db := conectaNoBancoDeDados()
+	selecaoPorID, err := db.Query("select p.id, p.nome, p.sobrenome, e.cidade, e.uf from tb_pessoa p left join tb_endereco e on p.endereco_id=e.id where e.cidade=$1", cidadeURL)
+	mensagemErro(err)
+	pessoasPorCidade := Cidade{}
+	var pessoas []Pessoa
+	for selecaoPorID.Next() {
+		var (
+			id int
+			nome, sobrenome, cidade, uf string
+		)
+		err = selecaoPorID.Scan(&id, &nome, &sobrenome, &cidade, &uf)
+		mensagemErro(err)
+		pessoasPorCidade.Cidade=cidade
+		pessoasPorCidade.UF=uf
+		pessoa := Pessoa{Id: id, PrimeiroNome: nome, Sobrenome: sobrenome}
+		pessoas = append(pessoas, pessoa)
+		pessoasPorCidade.Pessoas= pessoas
+	}
+	defer db.Close()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(pessoasPorCidade)
+}
+
 func main() {
 	rotas := mux.NewRouter()
 	rotas.HandleFunc("/pessoas", ListarPessoas).Methods("GET")
 	rotas.HandleFunc("/pessoa/{ID}", BuscarPessoaPorID).Methods("GET")
 	rotas.HandleFunc("/pessoa/nome/", BuscarPessoaPorNomeESobrenome).Methods("GET")
+	rotas.HandleFunc("/pessoas/cidade/", BuscarPessoasPorCidade).Methods("GET")
 	rotas.HandleFunc("/pessoa/", CriarPessoa).Methods("POST")
 	rotas.HandleFunc("/pessoa/{ID}", AlterarPessoa).Methods("PUT")
 	rotas.HandleFunc("/pessoa/{ID}", DeletarPessoa).Methods("DELETE")
